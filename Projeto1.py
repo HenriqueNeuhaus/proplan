@@ -506,9 +506,6 @@ def main():
                 xls = pd.ExcelFile(arquivo_excel)
                 sheet_names = xls.sheet_names
                 
-                summary_dfs = []
-                detailed_data = []
-
                 sheet_processors = {
                     'TAM': (lambda: pd.read_excel(arquivo_excel, sheet_name='TAM', header=[0, 1], engine='openpyxl'), process_dataframe),
                     'TDU': (lambda: pd.read_excel(arquivo_excel, sheet_name='TDU', engine='openpyxl', skiprows=3, header=None), process_tdu_sheet),
@@ -519,39 +516,54 @@ def main():
                     'CC': (lambda: pd.read_excel(arquivo_excel, sheet_name='CC', engine='openpyxl'), process_cc_sheet),
                     'LAB': (lambda: pd.read_excel(arquivo_excel, sheet_name='LAB', engine='openpyxl'), process_lab_sheet)
                 }
+                
+                expected_sheets = list(sheet_processors.keys())
+                available_sheets = [s for s in expected_sheets if s in sheet_names]
 
-                for sheet_name, (reader, processor) in sheet_processors.items():
-                    if sheet_name in sheet_names:
-                        df = reader()
-                        summary_df, detailed_df, title = processor(df)
-                        if summary_df is not None:
-                            summary_dfs.append(summary_df)
-                            if detailed_df is not None:
-                                detailed_data.append((title, detailed_df))
+                if not available_sheets:
+                    st.error(f"O arquivo '{arquivo_excel.name}' não contém nenhuma das abas esperadas para análise: {', '.join(expected_sheets)}. Por favor, verifique se este é o arquivo correto.")
+                else:
+                    summary_dfs = []
+                    detailed_data = []
 
-                if summary_dfs:
-                    final_df = summary_dfs[0]
-                    for df in summary_dfs[1:]:
-                        final_df = pd.merge(final_df, df, on='Unidade Acadêmica', how='outer')
-                    
-                    cols = final_df.columns.tolist()
-                    if '#Discentes (TDU)' in cols and 'Total (TAA)' in cols:
-                        cols.insert(cols.index('#Discentes (TDU)'), cols.pop(cols.index('Total (TAA)')))
-                        final_df = final_df[cols]
-                        total_taa = pd.to_numeric(final_df['Total (TAA)'], errors='coerce').fillna(0)
-                        discentes_tdu = pd.to_numeric(final_df['#Discentes (TDU)'], errors='coerce').fillna(0)
-                        final_df['RAPT'] = (total_taa / discentes_tdu).replace([np.inf, -np.inf], 0).fillna(0)
+                    for sheet_name in available_sheets:
+                        reader, processor = sheet_processors[sheet_name]
+                        try:
+                            df = reader()
+                            summary_df, detailed_df, title = processor(df)
+                            if summary_df is not None:
+                                summary_dfs.append(summary_df)
+                                if detailed_df is not None:
+                                    detailed_data.append((title, detailed_df))
+                        except Exception as sheet_error:
+                            st.warning(f"Aba '{sheet_name}' encontrada, mas não pôde ser processada. Erro: {sheet_error}")
 
-                    st.subheader("Tabela Resumo")
-                    st.dataframe(final_df.set_index('Unidade Acadêmica'))
 
-                    with st.expander("Mostrar tabelas detalhadas"):
-                        for title, df_to_display in detailed_data:
-                            st.subheader(title)
-                            st.dataframe(df_to_display)
+                    if summary_dfs:
+                        final_df = summary_dfs[0]
+                        for df in summary_dfs[1:]:
+                            final_df = pd.merge(final_df, df, on='Unidade Acadêmica', how='outer')
+                        
+                        cols = final_df.columns.tolist()
+                        if '#Discentes (TDU)' in cols and 'Total (TAA)' in cols:
+                            cols.insert(cols.index('#Discentes (TDU)'), cols.pop(cols.index('Total (TAA)')))
+                            final_df = final_df[cols]
+                            total_taa = pd.to_numeric(final_df['Total (TAA)'], errors='coerce').fillna(0)
+                            discentes_tdu = pd.to_numeric(final_df['#Discentes (TDU)'], errors='coerce').fillna(0)
+                            final_df['RAPT'] = (total_taa / discentes_tdu).replace([np.inf, -np.inf], 0).fillna(0)
+
+                        st.subheader("Tabela Resumo")
+                        st.dataframe(final_df.set_index('Unidade Acadêmica'))
+
+                        with st.expander("Mostrar tabelas detalhadas"):
+                            for title, df_to_display in detailed_data:
+                                st.subheader(title)
+                                st.dataframe(df_to_display)
+                    else:
+                        st.warning("Nenhuma das abas do arquivo pôde ser processada com sucesso. Verifique os erros acima e o formato do arquivo.")
 
             except Exception as e:
-                st.error(f"Ocorreu um erro ao processar o arquivo: {e}")
+                st.error(f"Não foi possível ler o arquivo '{arquivo_excel.name}'. O arquivo pode estar corrompido ou não é um formato Excel válido. Erro: {e}")
         else:
             st.info("Por favor, anexe um arquivo .xlsx para iniciar a análise.")
 
