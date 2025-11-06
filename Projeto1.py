@@ -26,12 +26,14 @@ def processa_oferta(df, nome_arquivo):
     # Verifica se todas as colunas necessárias estão presentes.
     colunas_faltantes = [col for col in colunas_oferta if col not in df.columns]
     if not colunas_faltantes:
+        # Extrai apenas as colunas de interesse para a análise.
         df_extraido = df[colunas_oferta]
         
         # Widgets da barra lateral para personalização da tabela.
         with st.sidebar.expander("⚙️ Personalizar Tabela de Oferta", expanded=True):
             colunas_selecionadas = [col for col in colunas_oferta if st.checkbox(col, value=True, key=f"oferta_{col}")]
         
+        # Garante que o usuário selecione pelo menos uma coluna.
         if not colunas_selecionadas:
             st.warning("Selecione pelo menos uma coluna para exibir a tabela.")
             return
@@ -44,13 +46,17 @@ def processa_oferta(df, nome_arquivo):
         with st.sidebar.expander("📊 Filtros dos Gráficos de Oferta"):
             # Filtros para Gráfico de Barras
             st.subheader("Gráfico de Barras")
-            eixo_x_bar = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, key='oferta_x_bar')
-            eixo_y_bar = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, key='oferta_y_bar')
+            default_x_index = colunas_selecionadas.index("Unidade Academica") if "Unidade Academica" in colunas_selecionadas else 0
+            default_y_index = colunas_selecionadas.index("Periodo") if "Periodo" in colunas_selecionadas else 0
+            eixo_x_bar = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_index, key='oferta_x_bar')
+            eixo_y_bar = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_index, key='oferta_y_bar')
 
             # Filtros para Gráfico de Linhas
             st.subheader("Gráfico de Linhas")
-            eixo_x_line = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, key='oferta_x_line')
-            eixo_y_line = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, key='oferta_y_line')
+            default_x_index = colunas_selecionadas.index("Unidade Academica") if "Unidade Academica" in colunas_selecionadas else 0
+            default_y_index = colunas_selecionadas.index("Periodo") if "Periodo" in colunas_selecionadas else 0
+            eixo_x_line = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_index, key='oferta_x_line')
+            eixo_y_line = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_index, key='oferta_y_line')
 
             # Filtros para Gráfico de Pizza
             st.subheader("Gráfico de Pizza")
@@ -66,6 +72,7 @@ def processa_oferta(df, nome_arquivo):
             if eixo_x_bar and eixo_y_bar:
                 st.subheader(f"Gráfico de Barras: {eixo_y_bar} por {eixo_x_bar}")
                 try:
+                    # Agrega os dados para o gráfico de barras.
                     if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar]):
                         chart_data = df_agrupado.groupby(eixo_x_bar)[eixo_y_bar].sum().reset_index()
                     else:
@@ -80,6 +87,7 @@ def processa_oferta(df, nome_arquivo):
             if eixo_x_line and eixo_y_line:
                 st.subheader(f"Gráfico de Linhas: {eixo_y_line} por {eixo_x_line}")
                 try:
+                    # Agrega os dados para o gráfico de linhas.
                     if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line]):
                         chart_data = df_agrupado.groupby(eixo_x_line)[eixo_y_line].sum().reset_index()
                     else:
@@ -93,6 +101,7 @@ def processa_oferta(df, nome_arquivo):
         if eixo_pizza:
             st.subheader(f"Gráfico de Pizza: {eixo_pizza}")
             try:
+                # Agrega os dados para o gráfico de pizza.
                 chart_data = df_agrupado[eixo_pizza].value_counts().reset_index()
                 chart_data.columns = [eixo_pizza, 'Contagem']
                 fig = px.pie(chart_data, names=eixo_pizza, values='Contagem')
@@ -167,6 +176,7 @@ def processa_matricula(df, nome_arquivo):
     # Verifica se todas as colunas necessárias estão presentes.
     colunas_faltantes = [col for col in colunas_matricula if col not in df.columns]
     if not colunas_faltantes:
+        # Extrai apenas as colunas de interesse para a análise.
         df_extraido = df[colunas_matricula]
 
         # Widgets da barra lateral para personalização da tabela.
@@ -181,6 +191,7 @@ def processa_matricula(df, nome_arquivo):
 
         df_agrupado = df_extraido[colunas_selecionadas].sort_values(by=colunas_selecionadas[0])
         
+        # Remove matrículas duplicadas se a opção for selecionada.
         if remover_duplicadas:
             if 'Matricula' in df_agrupado.columns:
                 registros_antes = len(df_agrupado)
@@ -196,17 +207,22 @@ def processa_matricula(df, nome_arquivo):
         with st.sidebar.expander("📊 Filtros dos Gráficos de Matrícula"):
             # Filtros para Gráfico de Barras
             st.subheader("Gráfico de Barras")
-            eixo_x_bar_mat = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, key='matricula_x_bar')
-            eixo_y_bar_mat = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, key='matricula_y_bar')
+            default_x_bar_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
+            default_y_bar_index = colunas_selecionadas.index("Matricula") if "Matricula" in colunas_selecionadas else 0
+            eixo_x_bar_mat = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_bar_index, key='matricula_x_bar')
+            eixo_y_bar_mat = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_bar_index, key='matricula_y_bar')
 
             # Filtros para Gráfico de Linhas
             st.subheader("Gráfico de Linhas")
-            eixo_x_line_mat = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, key='matricula_x_line')
-            eixo_y_line_mat = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, key='matricula_y_line')
+            default_x_line_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
+            default_y_line_index = colunas_selecionadas.index("Matricula") if "Matricula" in colunas_selecionadas else 0
+            eixo_x_line_mat = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_line_index, key='matricula_x_line')
+            eixo_y_line_mat = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_line_index, key='matricula_y_line')
 
             # Filtros para Gráfico de Pizza
             st.subheader("Gráfico de Pizza")
-            eixo_pizza_mat = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, key='matricula_pizza')
+            default_pie_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
+            eixo_pizza_mat = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, index=default_pie_index, key='matricula_pizza')
 
         # Exibição dos gráficos
         st.header("Gráficos Personalizáveis de Matrícula")
@@ -218,6 +234,7 @@ def processa_matricula(df, nome_arquivo):
             if eixo_x_bar_mat and eixo_y_bar_mat:
                 st.subheader(f"Gráfico de Barras: {eixo_y_bar_mat} por {eixo_x_bar_mat}")
                 try:
+                    # Agrega os dados para o gráfico de barras.
                     if eixo_y_bar_mat == 'Matricula':
                         chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].nunique().reset_index()
                     elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar_mat]):
@@ -234,6 +251,7 @@ def processa_matricula(df, nome_arquivo):
             if eixo_x_line_mat and eixo_y_line_mat:
                 st.subheader(f"Gráfico de Linhas: {eixo_y_line_mat} por {eixo_x_line_mat}")
                 try:
+                    # Agrega os dados para o gráfico de linhas.
                     if eixo_y_line_mat == 'Matricula':
                         chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].nunique().reset_index()
                     elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line_mat]):
@@ -253,6 +271,7 @@ def processa_matricula(df, nome_arquivo):
                     if eixo_pizza_mat == 'Matricula':
                         st.warning("Gráfico de pizza de matrículas individuais não é informativo. Selecione outra coluna para agrupar.")
                     else:
+                        # Conta alunos únicos para o gráfico de pizza.
                         chart_data = df_agrupado.groupby(eixo_pizza_mat)['Matricula'].nunique().reset_index()
                         fig = px.pie(chart_data, names=eixo_pizza_mat, values='Matricula')
                         st.plotly_chart(fig, use_container_width=True)
@@ -365,14 +384,17 @@ def processa_matricula(df, nome_arquivo):
 #----------------------------------------------------------------------#
 
 def find_latest_year(df):
+    """Encontra o ano mais recente nas colunas do DataFrame."""
     years = set()
     for col in df.columns:
+        # Procura por um padrão de ano/semestre (ex: 2025/1) no nome da coluna.
         match = re.match(r'(\d{4})/\d', str(col[1]))
         if match:
             years.add(int(match.group(1)))
     return max(years) if years else None
 
 def process_dataframe(df):
+    """Processa a aba 'TAM' do arquivo Excel."""
     title = "Análise de Matrículas (TAM)"
     latest_year = find_latest_year(df)
     if not latest_year:
@@ -393,12 +415,14 @@ def process_dataframe(df):
     data_slice = df.head(8)
     result_df = pd.DataFrame({'Unidade Acadêmica': data_slice[academic_unit_col]})
     
+    # Calcula os totais para o primeiro semestre.
     namatg_sem1 = data_slice[col_g_sem1].fillna(0)
     namatmd_sem1 = data_slice[col_md_sem1].fillna(0)
     result_df[f'NamatG {latest_year}/1'] = namatg_sem1
     result_df[f'NamatM+NamatD {latest_year}/1'] = namatmd_sem1
     result_df[f'NamatU {latest_year}/1'] = namatg_sem1.astype(int) + namatmd_sem1.astype(int)
 
+    # Calcula os totais para o segundo semestre, se disponível.
     if col_g_sem2 in df.columns and col_md_sem2 in df.columns and data_slice[col_g_sem2].count() > 0:
         namatg_sem2 = data_slice[col_g_sem2].fillna(0)
         namatmd_sem2 = data_slice[col_md_sem2].fillna(0)
@@ -413,12 +437,14 @@ def process_dataframe(df):
     return summary_df, result_df.set_index('Unidade Acadêmica'), title
 
 def find_column(df, keyword):
+    """Encontra uma coluna no DataFrame que contém uma palavra-chave."""
     for col in df.columns:
         if keyword in str(col[0]) or keyword in str(col[1]):
             return col
     return None
 
 def process_taa_sheet(df):
+    """Processa a aba 'TAA' do arquivo Excel."""
     title = "Análise da Taxa de Aprovação (TAA)"
     unit_col = df.columns[0]
     total_col = find_column(df, 'Total')
@@ -439,6 +465,7 @@ def process_taa_sheet(df):
     return summary_df, result_df.set_index('Unidade Acadêmica'), title
 
 def process_chmt_sheet(df):
+    """Processa a aba 'CHMT' do arquivo Excel."""
     title = "Análise de Carga Horária Média Total (CHMT)"
     unit_col = df.columns[0]
     workload_keyword = 'Carga horária docente efetivamente ministrada'
@@ -458,6 +485,7 @@ def process_chmt_sheet(df):
     return summary_df, result_df.set_index('Unidade Acadêmica'), title
 
 def process_pep_sheet(df):
+    """Processa a aba 'PEP' do arquivo Excel."""
     title = "Análise de Pesquisa e Extensão (PEP)"
     unit_col = df.columns[0]
     pesquisa_col = find_column(df, 'Pesquisa')
@@ -480,6 +508,7 @@ def process_pep_sheet(df):
     return summary_df, result_df.set_index('Unidade Acadêmica'), title
 
 def process_lic_sheet(df):
+    """Processa a aba 'LIC' do arquivo Excel."""
     title = "Análise de Cursos de Licenciatura (LIC)"
     if 'Licenciaturas' not in df.columns:
         st.error("A coluna 'Licenciaturas' não foi encontrada na aba 'LIC'. Por favor, verifique o arquivo.")
@@ -491,6 +520,7 @@ def process_lic_sheet(df):
         unidade_col = df.columns[0]
 
         def contar_cursos(cursos):
+            """Conta o número de cursos em uma string separada por vírgulas."""
             if isinstance(cursos, str) and cursos.strip() not in ['--', '-']:
                 lista_cursos = [curso.strip() for curso in cursos.split(',') if curso.strip()]
                 return len(lista_cursos)
@@ -499,6 +529,7 @@ def process_lic_sheet(df):
         df['Contagem'] = df['Licenciaturas'].apply(contar_cursos)
 
         def agg_licenciaturas(series):
+            """Agrega os nomes dos cursos de licenciatura, removendo duplicatas."""
             all_courses = []
             for item in series:
                 if isinstance(item, str) and item.strip() not in ['--', '-']:
@@ -523,6 +554,7 @@ def process_lic_sheet(df):
         return summary_df, resultado_display.set_index('Unidade Acadêmica'), title
 
 def process_cc_sheet(df):
+    """Processa a aba 'CC' do arquivo Excel."""
     title = "Análise de CC Médio (CC)"
     unidade_col_name = df.columns[0]
     cc_medio_col_name = 'CC médio'
@@ -542,6 +574,7 @@ def process_cc_sheet(df):
         return summary_df, resultado.set_index('Unidade Acadêmica'), title
 
 def process_lab_sheet(df):
+    """Processa a aba 'LAB' do arquivo Excel."""
     title = "Análise de Laboratórios (LAB)"
     unidade_col_name = df.columns[0]
     lab_col_name = 'Laboratórios'
@@ -561,6 +594,7 @@ def process_lab_sheet(df):
         return summary_df, resultado.set_index('Unidade Acadêmica'), title
 
 def process_tdu_sheet(df):
+    """Processa a aba 'TDU' do arquivo Excel."""
     title = "Total de Docentes da Unidade (TDU)"
     FATOR_20H = 0.60
     FATOR_40H = 1.00
@@ -581,6 +615,7 @@ def process_tdu_sheet(df):
         for col in colunas_numericas:
             df[col] = df[col].astype(int)
         
+        # Calcula o TDU com base nos fatores de cada regime de trabalho.
         df['TDU Calculado'] = (df['20H'] * FATOR_20H) + \
                               (df['40H'] * FATOR_40H) + \
                               (df['DE'] * FATOR_DE)
@@ -606,6 +641,7 @@ def main():
     st.title("Painel de Análise de Dados")
     st.sidebar.title("Menu de Ferramentas")
     
+    # Menu de seleção de ferramentas.
     opcoes = {
         'Analisador de CSVs Acadêmicos': '📊 Analisador de CSVs Acadêmicos',
         'Analisador de Excel Acadêmico': '📄 Analisador de Excel Acadêmico'
@@ -616,8 +652,8 @@ def main():
     )
     ferramenta_escolhida = [k for k, v in opcoes.items() if v == escolha_formatada][0]
 
+    # Lógica para a Ferramenta 1: Analisador de CSVs
     if ferramenta_escolhida == 'Analisador de CSVs Acadêmicos':
-        # Lógica para a Ferramenta 1: Analisador de CSVs
         st.header("Analisador de CSVs Acadêmicos")
         st.markdown("Carregue os arquivos CSV para gerar as tabelas de Oferta e Matrícula.")
         with st.sidebar.expander("📂 Carregar Arquivos CSV", expanded=True):
@@ -634,6 +670,7 @@ def main():
         except Exception as e:
             st.error(f"Ocorreu um erro ao processar os arquivos CSV: {e}")
 
+    # Lógica para a Ferramenta 2: Analisador de Excel
     elif ferramenta_escolhida == 'Analisador de Excel Acadêmico':
         st.header("Analisador de Excel Acadêmico")
         st.markdown("Carregue o arquivo Excel para gerar a tabela consolidada.")
@@ -645,6 +682,7 @@ def main():
                 xls = pd.ExcelFile(arquivo_excel)
                 sheet_names = xls.sheet_names
                 
+                # Dicionário que mapeia nomes de abas a funções de leitura e processamento.
                 sheet_processors = {
                     'TAM': (lambda: pd.read_excel(arquivo_excel, sheet_name='TAM', header=[0, 1], engine='openpyxl'), process_dataframe),
                     'TDU': (lambda: pd.read_excel(arquivo_excel, sheet_name='TDU', engine='openpyxl', skiprows=3, header=None), process_tdu_sheet),
@@ -665,6 +703,7 @@ def main():
                     summary_dfs = []
                     detailed_data = []
 
+                    # Itera sobre as abas disponíveis e as processa.
                     for sheet_name in available_sheets:
                         reader, processor = sheet_processors[sheet_name]
                         try:
@@ -679,10 +718,12 @@ def main():
 
 
                     if summary_dfs:
+                        # Une os DataFrames de resumo de cada aba.
                         final_df = summary_dfs[0]
                         for df in summary_dfs[1:]:
                             final_df = pd.merge(final_df, df, on='Unidade Acadêmica', how='outer')
                         
+                        # Reordena as colunas e calcula o RAPT.
                         cols = final_df.columns.tolist()
                         if '#Discentes (TDU)' in cols and 'Total (TAA)' in cols:
                             cols.insert(cols.index('#Discentes (TDU)'), cols.pop(cols.index('Total (TAA)')))
@@ -694,6 +735,7 @@ def main():
                         st.subheader("Tabela Resumo")
                         st.dataframe(final_df.set_index('Unidade Acadêmica'))
 
+                        # Expander para mostrar as tabelas detalhadas de cada aba.
                         with st.expander("Mostrar tabelas detalhadas"):
                             for title, df_to_display in detailed_data:
                                 st.subheader(title)
@@ -704,12 +746,12 @@ def main():
                         #----------------------------------------------------------------------#
                         st.header("Gráficos Fixos do Excel")
 
-                        # Iterar sobre as colunas do final_df (exceto 'Unidade Acadêmica') para gerar gráficos de pizza
+                        # Itera sobre as colunas do final_df para gerar gráficos de pizza.
                         for col in final_df.columns:
                             if col != 'Unidade Acadêmica' and col != 'Total (TAA)':
                                 st.subheader(f"Distribuição de {col} por Unidade Acadêmica")
                                 try:
-                                    # Certificar-se de que a coluna é numérica e não contém apenas zeros ou NaNs
+                                    # Certifica-se de que a coluna é numérica e não contém apenas zeros ou NaNs.
                                     if pd.api.types.is_numeric_dtype(final_df[col]) and final_df[col].sum() > 0:
                                         chart_data = final_df[['Unidade Acadêmica', col]].dropna()
                                         if not chart_data.empty:
