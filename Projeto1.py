@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
+import os
 from datetime import datetime
 import plotly.express as px
 
@@ -17,7 +18,7 @@ def processa_oferta(df, nome_arquivo):
         df (pd.DataFrame): O DataFrame carregado do arquivo CSV de oferta.
         nome_arquivo (str): O nome do arquivo original para exibição.
     """
-    st.header(f"Tabela 1: Análise de Oferta de Turmas")
+    st.header(f"Análise de Oferta de Turmas")
     st.subheader(f"(Arquivo: {nome_arquivo})")
 
     # Define as colunas esperadas no arquivo de oferta.
@@ -30,8 +31,8 @@ def processa_oferta(df, nome_arquivo):
         df_extraido = df[colunas_oferta]
         
         # Widgets da barra lateral para personalização da tabela.
-        with st.sidebar.expander("⚙️ Personalizar Tabela de Oferta", expanded=True):
-            colunas_selecionadas = [col for col in colunas_oferta if st.checkbox(col, value=True, key=f"oferta_{col}")]
+        with st.sidebar.expander(f"⚙️ Personalizar Tabela: {nome_arquivo}", expanded=False):
+            colunas_selecionadas = [col for col in colunas_oferta if st.checkbox(col, value=True, key=f"oferta_{nome_arquivo}_{col}")]
         
         # Garante que o usuário selecione pelo menos uma coluna.
         if not colunas_selecionadas:
@@ -40,74 +41,92 @@ def processa_oferta(df, nome_arquivo):
 
         # Exibe o DataFrame com as colunas selecionadas e ordenadas.
         df_agrupado = df_extraido[colunas_selecionadas].sort_values(by=colunas_selecionadas[0])
-        st.dataframe(df_agrupado)
+        with st.expander(f"Mostrar tabela detalhada: {nome_arquivo}", expanded=False):
+            st.dataframe(df_agrupado)
 
+        # Cards com informações principais
+        with st.container(border=True):
+            st.subheader("Resumo da Oferta")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total de Turmas", f"{len(df_agrupado):,}")
+            with col2:
+                st.metric("Total de Vagas Ofertadas", f"{df_agrupado['Vagas Ofertadas'].sum():,}" if 'Vagas Ofertadas' in df_agrupado else "N/A")
+            with col3:
+                st.metric("Total de Matriculados", f"{df_agrupado['Total Matriculados'].sum():,}" if 'Total Matriculados' in df_agrupado else "N/A")
+            with col4:
+                st.metric("Unidades Acadêmicas", f"{df_agrupado['Unidade Academica'].nunique()}" if 'Unidade Academica' in df_agrupado else "N/A")
+
+        st.markdown("---")
         # Nova aba de filtros para os gráficos na barra lateral
-        with st.sidebar.expander("📊 Filtros dos Gráficos de Oferta"):
+        with st.sidebar.expander(f"📊 Filtros Gráficos: {nome_arquivo}", expanded=False):
             # Filtros para Gráfico de Barras
             st.subheader("Gráfico de Barras")
             default_x_index = colunas_selecionadas.index("Unidade Academica") if "Unidade Academica" in colunas_selecionadas else 0
             default_y_index = colunas_selecionadas.index("Periodo") if "Periodo" in colunas_selecionadas else 0
-            eixo_x_bar = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_index, key='oferta_x_bar')
-            eixo_y_bar = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_index, key='oferta_y_bar')
+            eixo_x_bar = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_index, key=f'oferta_x_bar_{nome_arquivo}')
+            eixo_y_bar = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_index, key=f'oferta_y_bar_{nome_arquivo}')
 
             # Filtros para Gráfico de Linhas
             st.subheader("Gráfico de Linhas")
             default_x_index = colunas_selecionadas.index("Unidade Academica") if "Unidade Academica" in colunas_selecionadas else 0
             default_y_index = colunas_selecionadas.index("Periodo") if "Periodo" in colunas_selecionadas else 0
-            eixo_x_line = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_index, key='oferta_x_line')
-            eixo_y_line = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_index, key='oferta_y_line')
+            eixo_x_line = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_index, key=f'oferta_x_line_{nome_arquivo}')
+            eixo_y_line = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_index, key=f'oferta_y_line_{nome_arquivo}')
 
             # Filtros para Gráfico de Pizza
             st.subheader("Gráfico de Pizza")
-            eixo_pizza = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, key='oferta_pizza')
+            eixo_pizza = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, key=f'oferta_pizza_{nome_arquivo}')
 
         # Exibição dos gráficos
         st.header("Gráficos Personalizáveis de Oferta")
 
         col1, col2 = st.columns(2)
 
-        with col1:
-            # Gráfico de Barras
-            if eixo_x_bar and eixo_y_bar:
-                st.subheader(f"Gráfico de Barras: {eixo_y_bar} por {eixo_x_bar}")
-                try:
-                    # Agrega os dados para o gráfico de barras.
-                    if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar]):
-                        chart_data = df_agrupado.groupby(eixo_x_bar)[eixo_y_bar].sum().reset_index()
-                    else:
-                        chart_data = df_agrupado.groupby(eixo_x_bar)[eixo_y_bar].count().reset_index()
-                    fig = px.bar(chart_data, x=eixo_x_bar, y=eixo_y_bar)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Não foi possível gerar o gráfico de barras: {e}")
+        # Gráfico de Barras
+        if eixo_x_bar and eixo_y_bar:
+            with col1:
+                with st.container(border=True):
+                    st.subheader(f"Gráfico de Barras: {eixo_y_bar} por {eixo_x_bar}")
+                    try:
+                        # Agrega os dados para o gráfico de barras.
+                        if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar]):
+                            chart_data = df_agrupado.groupby(eixo_x_bar)[eixo_y_bar].sum().reset_index()
+                        else:
+                            chart_data = df_agrupado.groupby(eixo_x_bar)[eixo_y_bar].count().reset_index()
+                        fig = px.bar(chart_data, x=eixo_x_bar, y=eixo_y_bar)
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Não foi possível gerar o gráfico de barras: {e}")
 
-        with col2:
-            # Gráfico de Linhas
-            if eixo_x_line and eixo_y_line:
-                st.subheader(f"Gráfico de Linhas: {eixo_y_line} por {eixo_x_line}")
-                try:
-                    # Agrega os dados para o gráfico de linhas.
-                    if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line]):
-                        chart_data = df_agrupado.groupby(eixo_x_line)[eixo_y_line].sum().reset_index()
-                    else:
-                        chart_data = df_agrupado.groupby(eixo_x_line)[eixo_y_line].count().reset_index()
-                    fig = px.line(chart_data, x=eixo_x_line, y=eixo_y_line)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Não foi possível gerar o gráfico de linhas: {e}")
+        # Gráfico de Linhas
+        if eixo_x_line and eixo_y_line:
+            with col2:
+                with st.container(border=True):
+                    st.subheader(f"Gráfico de Linhas: {eixo_y_line} por {eixo_x_line}")
+                    try:
+                        # Agrega os dados para o gráfico de linhas.
+                        if pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line]):
+                            chart_data = df_agrupado.groupby(eixo_x_line)[eixo_y_line].sum().reset_index()
+                        else:
+                            chart_data = df_agrupado.groupby(eixo_x_line)[eixo_y_line].count().reset_index()
+                        fig = px.line(chart_data, x=eixo_x_line, y=eixo_y_line)
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Não foi possível gerar o gráfico de linhas: {e}")
 
         # Gráfico de Pizza
         if eixo_pizza:
-            st.subheader(f"Gráfico de Pizza: {eixo_pizza}")
-            try:
-                # Agrega os dados para o gráfico de pizza.
-                chart_data = df_agrupado[eixo_pizza].value_counts().reset_index()
-                chart_data.columns = [eixo_pizza, 'Contagem']
-                fig = px.pie(chart_data, names=eixo_pizza, values='Contagem')
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Não foi possível gerar o gráfico de pizza: {e}")
+            with st.container(border=True):
+                st.subheader(f"Gráfico de Pizza: {eixo_pizza}")
+                try:
+                    # Agrega os dados para o gráfico de pizza.
+                    chart_data = df_agrupado[eixo_pizza].value_counts().reset_index()
+                    chart_data.columns = [eixo_pizza, 'Contagem']
+                    fig = px.pie(chart_data, names=eixo_pizza, values='Contagem')
+                    st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Não foi possível gerar o gráfico de pizza: {e}")
 
         #----------------------------------------------------------------------#
         #  Gráficos Fixos de Oferta                                            #
@@ -116,48 +135,51 @@ def processa_oferta(df, nome_arquivo):
 
         # Gráfico de Unidade Academica
         st.subheader("Oferta por Unidade Acadêmica")
-        if "Unidade Academica" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Unidade Academica"].value_counts().reset_index()
-            chart_data.columns = ["Unidade Academica", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Unidade Academica", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_unidade_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Unidade Academica", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"oferta_unidade_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Unidade Academica' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Unidade Academica" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Unidade Academica"].value_counts().reset_index()
+                chart_data.columns = ["Unidade Academica", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Unidade Academica", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_unidade_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Unidade Academica", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"oferta_unidade_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Unidade Academica' não está disponível para gerar o gráfico.")
 
         # Gráfico de Situação da Turma
         st.subheader("Oferta por Situação da Turma")
-        if "Situacao Turma" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Situacao Turma"].value_counts().reset_index()
-            chart_data.columns = ["Situacao Turma", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Situacao Turma", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_situacao_bar_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Situacao Turma' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Situacao Turma" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Situacao Turma"].value_counts().reset_index()
+                chart_data.columns = ["Situacao Turma", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Situacao Turma", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_situacao_bar_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Situacao Turma' não está disponível para gerar o gráfico.")
 
         # Gráfico de Curso Responsável
         st.subheader("Oferta por Curso Responsável")
-        if "Curso Responsavel Oferta" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Curso Responsavel Oferta"].value_counts().reset_index()
-            chart_data.columns = ["Curso Responsavel Oferta", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Curso Responsavel Oferta", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_curso_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Curso Responsavel Oferta", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"oferta_curso_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Curso Responsavel Oferta' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Curso Responsavel Oferta" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Curso Responsavel Oferta"].value_counts().reset_index()
+                chart_data.columns = ["Curso Responsavel Oferta", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Curso Responsavel Oferta", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"oferta_curso_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Curso Responsavel Oferta", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"oferta_curso_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Curso Responsavel Oferta' não está disponível para gerar o gráfico.")
 
     else:
-        st.error(f"Erro no Arquivo 1 '{nome_arquivo}': Faltam as colunas: {', '.join(colunas_faltantes)}.")
+        st.error(f"Erro no Arquivo '{nome_arquivo}': Faltam as colunas: {', '.join(colunas_faltantes)}.")
 
 def processa_matricula(df, nome_arquivo):
     """
@@ -167,7 +189,7 @@ def processa_matricula(df, nome_arquivo):
         df (pd.DataFrame): O DataFrame carregado do arquivo CSV de matrícula.
         nome_arquivo (str): O nome do arquivo original para exibição.
     """
-    st.header(f"Tabela 2: Análise de Matrículas de Alunos")
+    st.header(f"Análise de Matrículas de Alunos")
     st.subheader(f"(Arquivo: {nome_arquivo})")
 
     # Define as colunas esperadas no arquivo de matrícula.
@@ -180,9 +202,9 @@ def processa_matricula(df, nome_arquivo):
         df_extraido = df[colunas_matricula]
 
         # Widgets da barra lateral para personalização da tabela.
-        with st.sidebar.expander("⚙️ Personalizar Tabela de Matrícula", expanded=True):
-            colunas_selecionadas = [col for col in colunas_matricula if st.checkbox(col, value=True, key=f"matricula_{col}")]
-            remover_duplicadas = st.checkbox("Remover matrículas duplicadas", key='remove_duplicates_matricula')
+        with st.sidebar.expander(f"⚙️ Personalizar Tabela: {nome_arquivo}", expanded=False):
+            colunas_selecionadas = [col for col in colunas_matricula if st.checkbox(col, value=True, key=f"matricula_{nome_arquivo}_{col}")]
+            remover_duplicadas = st.checkbox("Remover matrículas duplicadas", key=f'remove_duplicates_matricula_{nome_arquivo}')
 
         # Garante que pelo menos uma coluna foi selecionada.
         if not colunas_selecionadas:
@@ -201,89 +223,107 @@ def processa_matricula(df, nome_arquivo):
             else:
                 st.warning("A coluna 'Matricula' deve ser selecionada para remover duplicatas.")
         
-        st.dataframe(df_agrupado)
+        with st.expander(f"Mostrar tabela detalhada: {nome_arquivo}", expanded=False):
+            st.dataframe(df_agrupado)
 
+        # Cards com informações principais
+        with st.container(border=True):
+            st.subheader("Resumo das Matrículas")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total de Registros", f"{len(df_agrupado):,}")
+            with col2:
+                st.metric("Alunos Únicos", f"{df_agrupado['Matricula'].nunique():,}" if 'Matricula' in df_agrupado else "N/A")
+            with col3:
+                st.metric("Cursos Envolvidos", f"{df_agrupado['Curso'].nunique()}" if 'Curso' in df_agrupado else "N/A")
+            with col4:
+                st.metric("Disciplinas Envolvidas", f"{df_agrupado['Disciplina'].nunique()}" if 'Disciplina' in df_agrupado else "N/A")
+
+        st.markdown("---")
         # Nova aba de filtros para os gráficos na barra lateral
-        with st.sidebar.expander("📊 Filtros dos Gráficos de Matrícula"):
+        with st.sidebar.expander(f"📊 Filtros Gráficos: {nome_arquivo}", expanded=False):
             # Filtros para Gráfico de Barras
             st.subheader("Gráfico de Barras")
             default_x_bar_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
             default_y_bar_index = colunas_selecionadas.index("Matricula") if "Matricula" in colunas_selecionadas else 0
-            eixo_x_bar_mat = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_bar_index, key='matricula_x_bar')
-            eixo_y_bar_mat = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_bar_index, key='matricula_y_bar')
+            eixo_x_bar_mat = st.selectbox("Selecione a coluna para o eixo X (Barra):", colunas_selecionadas, index=default_x_bar_index, key=f'matricula_x_bar_{nome_arquivo}')
+            eixo_y_bar_mat = st.selectbox("Selecione a coluna para o eixo Y (Barra):", colunas_selecionadas, index=default_y_bar_index, key=f'matricula_y_bar_{nome_arquivo}')
 
             # Filtros para Gráfico de Linhas
             st.subheader("Gráfico de Linhas")
             default_x_line_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
             default_y_line_index = colunas_selecionadas.index("Matricula") if "Matricula" in colunas_selecionadas else 0
-            eixo_x_line_mat = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_line_index, key='matricula_x_line')
-            eixo_y_line_mat = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_line_index, key='matricula_y_line')
+            eixo_x_line_mat = st.selectbox("Selecione a coluna para o eixo X (Linha):", colunas_selecionadas, index=default_x_line_index, key=f'matricula_x_line_{nome_arquivo}')
+            eixo_y_line_mat = st.selectbox("Selecione a coluna para o eixo Y (Linha):", colunas_selecionadas, index=default_y_line_index, key=f'matricula_y_line_{nome_arquivo}')
 
             # Filtros para Gráfico de Pizza
             st.subheader("Gráfico de Pizza")
             default_pie_index = colunas_selecionadas.index("Curso") if "Curso" in colunas_selecionadas else 0
-            eixo_pizza_mat = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, index=default_pie_index, key='matricula_pizza')
+            eixo_pizza_mat = st.selectbox("Selecione a coluna para o gráfico de Pizza:", colunas_selecionadas, index=default_pie_index, key=f'matricula_pizza_{nome_arquivo}')
 
         # Exibição dos gráficos
         st.header("Gráficos Personalizáveis de Matrícula")
 
         col1, col2 = st.columns(2)
 
-        with col1:
-            # Gráfico de Barras
-            if eixo_x_bar_mat and eixo_y_bar_mat:
-                st.subheader(f"Gráfico de Barras: {eixo_y_bar_mat} por {eixo_x_bar_mat}")
-                try:
-                    # Agrega os dados para o gráfico de barras.
-                    if eixo_y_bar_mat == 'Matricula':
-                        chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].nunique().reset_index()
-                    elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar_mat]):
-                        chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].sum().reset_index()
-                    else:
-                        chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].count().reset_index()
-                    fig = px.bar(chart_data, x=eixo_x_bar_mat, y=eixo_y_bar_mat)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Não foi possível gerar o gráfico de barras: {e}")
+        # Gráfico de Barras
+        if eixo_x_bar_mat and eixo_y_bar_mat:
+            with col1:
+                with st.container(border=True):
+                    st.subheader(f"Gráfico de Barras: {eixo_y_bar_mat} por {eixo_x_bar_mat}")
+                    try:
+                        # Agrega os dados para o gráfico de barras.
+                        if eixo_y_bar_mat == 'Matricula':
+                            chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].nunique().reset_index()
+                        elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_bar_mat]):
+                            chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].sum().reset_index()
+                        else:
+                            chart_data = df_agrupado.groupby(eixo_x_bar_mat)[eixo_y_bar_mat].count().reset_index()
+                        fig = px.bar(chart_data, x=eixo_x_bar_mat, y=eixo_y_bar_mat)
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Não foi possível gerar o gráfico de barras: {e}")
 
-        with col2:
-            # Gráfico de Linhas
-            if eixo_x_line_mat and eixo_y_line_mat:
-                st.subheader(f"Gráfico de Linhas: {eixo_y_line_mat} por {eixo_x_line_mat}")
-                try:
-                    # Agrega os dados para o gráfico de linhas.
-                    if eixo_y_line_mat == 'Matricula':
-                        chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].nunique().reset_index()
-                    elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line_mat]):
-                        chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].sum().reset_index()
-                    else:
-                        chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].count().reset_index()
-                    fig = px.line(chart_data, x=eixo_x_line_mat, y=eixo_y_line_mat)
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Não foi possível gerar o gráfico de linhas: {e}")
+        # Gráfico de Linhas
+        if eixo_x_line_mat and eixo_y_line_mat:
+            with col2:
+                with st.container(border=True):
+                    st.subheader(f"Gráfico de Linhas: {eixo_y_line_mat} por {eixo_x_line_mat}")
+                    try:
+                        # Agrega os dados para o gráfico de linhas.
+                        if eixo_y_line_mat == 'Matricula':
+                            chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].nunique().reset_index()
+                        elif pd.api.types.is_numeric_dtype(df_agrupado[eixo_y_line_mat]):
+                            chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].sum().reset_index()
+                        else:
+                            chart_data = df_agrupado.groupby(eixo_x_line_mat)[eixo_y_line_mat].count().reset_index()
+                        fig = px.line(chart_data, x=eixo_x_line_mat, y=eixo_y_line_mat)
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Não foi possível gerar o gráfico de linhas: {e}")
 
         # Gráfico de Pizza
         if eixo_pizza_mat:
-            st.subheader(f"Gráfico de Pizza: Contagem de Alunos por {eixo_pizza_mat}")
-            try:
-                if 'Matricula' in df_agrupado.columns:
-                    if eixo_pizza_mat == 'Matricula':
-                        st.warning("Gráfico de pizza de matrículas individuais não é informativo. Selecione outra coluna para agrupar.")
+            with st.container(border=True):
+                st.subheader(f"Gráfico de Pizza: Contagem de Alunos por {eixo_pizza_mat}")
+                try:
+                    if 'Matricula' in df_agrupado.columns:
+                        if eixo_pizza_mat == 'Matricula':
+                            st.warning("Gráfico de pizza de matrículas individuais não é informativo. Selecione outra coluna para agrupar.")
+                        else:
+                            # Conta alunos únicos para o gráfico de pizza.
+                            chart_data = df_agrupado.groupby(eixo_pizza_mat)['Matricula'].nunique().reset_index()
+                            fig = px.pie(chart_data, names=eixo_pizza_mat, values='Matricula')
+                            st.plotly_chart(fig, use_container_width=True)
                     else:
-                        # Conta alunos únicos para o gráfico de pizza.
-                        chart_data = df_agrupado.groupby(eixo_pizza_mat)['Matricula'].nunique().reset_index()
-                        fig = px.pie(chart_data, names=eixo_pizza_mat, values='Matricula')
+                        st.warning("Para contar alunos únicos, por favor inclua a coluna 'Matricula' na sua seleção de colunas da tabela.")
+                        # Fallback para contagem de ocorrências se 'Matricula' não estiver disponível
+                        chart_data = df_agrupado[eixo_pizza_mat].value_counts().reset_index()
+                        chart_data.columns = [eixo_pizza_mat, 'Contagem']
+                        fig = px.pie(chart_data, names=eixo_pizza_mat, values='Contagem')
                         st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Para contar alunos únicos, por favor inclua a coluna 'Matricula' na sua seleção de colunas da tabela.")
-                    # Fallback para contagem de ocorrências se 'Matricula' não estiver disponível
-                    chart_data = df_agrupado[eixo_pizza_mat].value_counts().reset_index()
-                    chart_data.columns = [eixo_pizza_mat, 'Contagem']
-                    fig = px.pie(chart_data, names=eixo_pizza_mat, values='Contagem')
-                    st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Não foi possível gerar o gráfico de pizza: {e}")
+                except Exception as e:
+                    st.error(f"Não foi possível gerar o gráfico de pizza: {e}")
 
         #----------------------------------------------------------------------#
         #  Gráficos Fixos de Matrícula                                         #
@@ -292,92 +332,117 @@ def processa_matricula(df, nome_arquivo):
 
         # Gráfico de Cursos
         st.subheader("Matrículas por Curso")
-        if "Curso" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Curso"].value_counts().reset_index()
-            chart_data.columns = ["Curso", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Curso", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_curso_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Curso", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_curso_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Curso' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Curso" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Curso"].value_counts().reset_index()
+                chart_data.columns = ["Curso", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Curso", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_curso_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Curso", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_curso_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Curso' não está disponível para gerar o gráfico.")
 
         # Gráfico de Grau Acadêmico
         st.subheader("Matrículas por Grau Acadêmico")
-        if "Grau Academico" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Grau Academico"].value_counts().reset_index()
-            chart_data.columns = ["Grau Academico", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Grau Academico", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_grau_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Grau Academico", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_grau_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Grau Academico' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Grau Academico" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Grau Academico"].value_counts().reset_index()
+                chart_data.columns = ["Grau Academico", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Grau Academico", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_grau_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Grau Academico", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_grau_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Grau Academico' não está disponível para gerar o gráfico.")
 
         # Gráfico de Unidade do Aluno
         st.subheader("Matrículas por Unidade do Aluno")
-        if "Unidade Aluno" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Unidade Aluno"].value_counts().reset_index()
-            chart_data.columns = ["Unidade Aluno", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Unidade Aluno", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_unidade_aluno_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Unidade Aluno", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_unidade_aluno_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Unidade Aluno' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Unidade Aluno" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Unidade Aluno"].value_counts().reset_index()
+                chart_data.columns = ["Unidade Aluno", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Unidade Aluno", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_unidade_aluno_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Unidade Aluno", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_unidade_aluno_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Unidade Aluno' não está disponível para gerar o gráfico.")
 
         # Gráfico de Situação
         st.subheader("Matrículas por Situação")
-        if "Situacao" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Situacao"].value_counts().reset_index()
-            chart_data.columns = ["Situacao", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Situacao", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_situacao_bar_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Situacao' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Situacao" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Situacao"].value_counts().reset_index()
+                chart_data.columns = ["Situacao", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Situacao", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_situacao_bar_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Situacao' não está disponível para gerar o gráfico.")
 
         # Gráfico de Núcleo
         st.subheader("Matrículas por Núcleo")
-        if "Nucleo" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Nucleo"].value_counts().reset_index()
-            chart_data.columns = ["Nucleo", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Nucleo", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_nucleo_bar_{nome_arquivo}")
-            with col2:
-                fig_pie = px.pie(chart_data, names="Nucleo", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_nucleo_pie_{nome_arquivo}")
-        else:
-            st.warning("A coluna 'Nucleo' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Nucleo" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Nucleo"].value_counts().reset_index()
+                chart_data.columns = ["Nucleo", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Nucleo", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"matricula_nucleo_bar_{nome_arquivo}")
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Nucleo", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True, key=f"matricula_nucleo_pie_{nome_arquivo}")
+            else:
+                st.warning("A coluna 'Nucleo' não está disponível para gerar o gráfico.")
 
         # Gráfico de Ano de Ingresso
         st.subheader("Matrículas por Ano de Ingresso")
-        if "Ano Ingresso" in df_agrupado.columns:
-            col1, col2 = st.columns(2)
-            chart_data = df_agrupado["Ano Ingresso"].value_counts().reset_index()
-            chart_data.columns = ["Ano Ingresso", "Contagem"]
-            with col1:
-                fig_bar = px.bar(chart_data, x="Ano Ingresso", y="Contagem")
-                st.plotly_chart(fig_bar, use_container_width=True)
-            with col2:
-                fig_pie = px.pie(chart_data, names="Ano Ingresso", values="Contagem")
-                st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.warning("A coluna 'Ano Ingresso' não está disponível para gerar o gráfico.")
+        with st.container(border=True):
+            if "Ano Ingresso" in df_agrupado.columns:
+                col1, col2 = st.columns(2)
+                chart_data = df_agrupado["Ano Ingresso"].value_counts().reset_index()
+                chart_data.columns = ["Ano Ingresso", "Contagem"]
+                with col1:
+                    fig_bar = px.bar(chart_data, x="Ano Ingresso", y="Contagem")
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                with col2:
+                    fig_pie = px.pie(chart_data, names="Ano Ingresso", values="Contagem")
+                    st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.warning("A coluna 'Ano Ingresso' não está disponível para gerar o gráfico.")
     else:
-        st.error(f"Erro no Arquivo 2 '{nome_arquivo}': Faltam as colunas: {', '.join(colunas_faltantes)}.")
+        st.error(f"Erro no Arquivo '{nome_arquivo}': Faltam as colunas: {', '.join(colunas_faltantes)}.")
+
+def identificar_tipo_csv(df):
+    """Identifica o tipo de arquivo CSV (Oferta ou Matrícula) com base nas colunas."""
+    colunas_oferta_check = ["Unidade Academica", "Codigo Componente", "Vagas Ofertadas", "Situacao Turma"]
+    colunas_matricula_check = ["Matricula", "Unidade Aluno", "Ano Ingresso", "Situacao"]
+
+    colunas_df = df.columns
+
+    is_oferta = all(col in colunas_df for col in colunas_oferta_check)
+    is_matricula = all(col in colunas_df for col in colunas_matricula_check)
+
+    if is_oferta:
+        return "Oferta"
+    elif is_matricula:
+        return "Matrícula"
+    else:
+        return "Desconhecido"
+
+
 
 #----------------------------------------------------------------------#
 #  FUNÇÕES PARA A FERRAMENTA 2: ANÁLISE DE EXCEL                       #
@@ -656,49 +721,92 @@ def main():
     if ferramenta_escolhida == 'Analisador de CSVs Acadêmicos':
         st.header("Analisador de CSVs Acadêmicos")
         st.markdown("Carregue os arquivos CSV para gerar as tabelas de Oferta e Matrícula.")
+
+        arquivos_selecionados = []
         with st.sidebar.expander("📂 Carregar Arquivos CSV", expanded=True):
-            arquivo_1 = st.file_uploader("1º Arquivo (Oferta de Turmas)", type=["csv"], key="csv1")
-            arquivo_2 = st.file_uploader("2º Arquivo (Matrícula de Alunos)", type=["csv"], key="csv2")
-        try:
-            if arquivo_1:
-                df_oferta = pd.read_csv(arquivo_1)
-                processa_oferta(df_oferta, arquivo_1.name)
-            st.markdown("---")
-            if arquivo_2:
-                df_matricula = pd.read_csv(arquivo_2)
-                processa_matricula(df_matricula, arquivo_2.name)
-        except Exception as e:
-            st.error(f"Ocorreu um erro ao processar os arquivos CSV: {e}")
+            tipo_input = st.radio("Como você quer fornecer os arquivos?", ('Fazer upload', 'Usar arquivos locais'))
+
+            if tipo_input == 'Fazer upload':
+                arquivos_selecionados = st.file_uploader("Selecione um ou mais arquivos CSV", type=["csv"], accept_multiple_files=True)
+
+            elif tipo_input == 'Usar arquivos locais':
+                try:
+                    pasta_arquivos = 'Arquivos'
+                    if os.path.exists(pasta_arquivos):
+                        arquivos_csv_locais = [f for f in os.listdir(pasta_arquivos) if f.endswith('.csv')]
+                        if arquivos_csv_locais:
+                            selecionados = st.multiselect("Selecione os arquivos da pasta 'Arquivos'", arquivos_csv_locais)
+                            arquivos_selecionados = [os.path.join(pasta_arquivos, f) for f in selecionados]
+                        else:
+                            st.warning("Nenhum arquivo CSV encontrado na pasta 'Arquivos'.")
+                    else:
+                        st.error("A pasta 'Arquivos' não foi encontrada.")
+                except Exception as e:
+                    st.error(f"Erro ao acessar a pasta 'Arquivos': {e}")
+
+        if arquivos_selecionados:
+            for i, arquivo in enumerate(arquivos_selecionados):
+                try:
+                    df = pd.read_csv(arquivo)
+                    nome_arquivo = os.path.basename(str(arquivo)) if not hasattr(arquivo, 'name') else arquivo.name
+                    tipo_arquivo = identificar_tipo_csv(df)
+
+                    st.markdown("---")
+                    if tipo_arquivo == "Oferta":
+                        processa_oferta(df, nome_arquivo)
+                    elif tipo_arquivo == "Matrícula":
+                        processa_matricula(df, nome_arquivo)
+                    else:
+                        st.warning(f"O arquivo '{nome_arquivo}' não foi reconhecido como um arquivo de Oferta ou Matrícula.")
+                except Exception as e:
+                    st.error(f"Ocorreu um erro ao processar o arquivo '{nome_arquivo}': {e}")
+        else:
+            st.info("Por favor, selecione ou faça upload de arquivos CSV para iniciar a análise.")
 
     # Lógica para a Ferramenta 2: Analisador de Excel
     elif ferramenta_escolhida == 'Analisador de Excel Acadêmico':
         st.header("Analisador de Excel Acadêmico")
         st.markdown("Carregue o arquivo Excel para gerar a tabela consolidada.")
+        
         with st.sidebar.expander("📂 Carregar Arquivo Excel", expanded=True):
-            arquivo_excel = st.file_uploader("Selecione o arquivo (.xlsx)", type="xlsx", key="excel1")
+            tipo_input_excel = st.radio("Como você quer fornecer o arquivo Excel?", ('Fazer upload', 'Usar arquivo local'), key='excel_radio')
+            arquivo_excel = None
+            if tipo_input_excel == 'Fazer upload':
+                arquivo_excel = st.file_uploader("Selecione o arquivo (.xlsx)", type="xlsx", key="excel_upload")
+            elif tipo_input_excel == 'Usar arquivo local':
+                try:
+                    arquivos_excel = [f for f in os.listdir('Arquivos') if f.endswith('.xlsx')]
+                    if arquivos_excel:
+                        arquivo_selecionado_excel = st.selectbox("Selecione o arquivo Excel", arquivos_excel, key='excel_select')
+                        arquivo_excel = os.path.join('Arquivos', arquivo_selecionado_excel)
+                    else:
+                        st.warning("Nenhum arquivo Excel (.xlsx) encontrado na pasta 'Arquivos'.")
+                except FileNotFoundError:
+                    st.error("A pasta 'Arquivos' não foi encontrada.")
 
         if arquivo_excel:
             try:
+                nome_arquivo_excel = os.path.basename(str(arquivo_excel)) if not hasattr(arquivo_excel, 'name') else arquivo_excel.name
                 xls = pd.ExcelFile(arquivo_excel)
                 sheet_names = xls.sheet_names
                 
                 # Dicionário que mapeia nomes de abas a funções de leitura e processamento.
                 sheet_processors = {
-                    'TAM': (lambda: pd.read_excel(arquivo_excel, sheet_name='TAM', header=[0, 1], engine='openpyxl'), process_dataframe),
-                    'TDU': (lambda: pd.read_excel(arquivo_excel, sheet_name='TDU', engine='openpyxl', skiprows=3, header=None), process_tdu_sheet),
-                    'TAA': (lambda: pd.read_excel(arquivo_excel, sheet_name='TAA', header=[0, 1], engine='openpyxl'), process_taa_sheet),
-                    'CHMT': (lambda: pd.read_excel(arquivo_excel, sheet_name='CHMT', header=[0, 1], engine='openpyxl'), process_chmt_sheet),
-                    'PEP': (lambda: pd.read_excel(arquivo_excel, sheet_name='PEP', header=[0, 1], engine='openpyxl'), process_pep_sheet),
-                    'LIC': (lambda: pd.read_excel(arquivo_excel, sheet_name='LIC', engine='openpyxl'), process_lic_sheet),
-                    'CC': (lambda: pd.read_excel(arquivo_excel, sheet_name='CC', engine='openpyxl'), process_cc_sheet),
-                    'LAB': (lambda: pd.read_excel(arquivo_excel, sheet_name='LAB', engine='openpyxl'), process_lab_sheet)
+                    'TAM': (lambda: pd.read_excel(xls, sheet_name='TAM', header=[0, 1], engine='openpyxl'), process_dataframe),
+                    'TDU': (lambda: pd.read_excel(xls, sheet_name='TDU', engine='openpyxl', skiprows=3, header=None), process_tdu_sheet),
+                    'TAA': (lambda: pd.read_excel(xls, sheet_name='TAA', header=[0, 1], engine='openpyxl'), process_taa_sheet),
+                    'CHMT': (lambda: pd.read_excel(xls, sheet_name='CHMT', header=[0, 1], engine='openpyxl'), process_chmt_sheet),
+                    'PEP': (lambda: pd.read_excel(xls, sheet_name='PEP', header=[0, 1], engine='openpyxl'), process_pep_sheet),
+                    'LIC': (lambda: pd.read_excel(xls, sheet_name='LIC', engine='openpyxl'), process_lic_sheet),
+                    'CC': (lambda: pd.read_excel(xls, sheet_name='CC', engine='openpyxl'), process_cc_sheet),
+                    'LAB': (lambda: pd.read_excel(xls, sheet_name='LAB', engine='openpyxl'), process_lab_sheet)
                 }
                 
                 expected_sheets = list(sheet_processors.keys())
                 available_sheets = [s for s in expected_sheets if s in sheet_names]
 
                 if not available_sheets:
-                    st.error(f"O arquivo '{arquivo_excel.name}' não contém nenhuma das abas esperadas para análise: {', '.join(expected_sheets)}. Por favor, verifique se este é o arquivo correto.")
+                    st.error(f"O arquivo '{nome_arquivo_excel}' não contém nenhuma das abas esperadas para análise: {', '.join(expected_sheets)}. Por favor, verifique se este é o arquivo correto.")
                 else:
                     summary_dfs = []
                     detailed_data = []
@@ -732,11 +840,30 @@ def main():
                             discentes_tdu = pd.to_numeric(final_df['#Discentes (TDU)'], errors='coerce').fillna(0)
                             final_df['RAPT'] = (total_taa / discentes_tdu).replace([np.inf, -np.inf], 0).fillna(0)
 
-                        st.subheader("Tabela Resumo")
-                        st.dataframe(final_df.set_index('Unidade Acadêmica'))
+                        # st.subheader("Tabela Resumo")
+                        # st.dataframe(final_df.set_index('Unidade Acadêmica')) # Tabela Ocultada
+
+                        # Cards com informações principais
+                        with st.container(border=True):
+                            st.subheader("Resumo Geral Acadêmico")
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                total_discentes = pd.to_numeric(final_df['#Discentes (TDU)'], errors='coerce').sum() if '#Discentes (TDU)' in final_df else 0
+                                st.metric("Total de Discentes", f"{total_discentes:,.0f}")
+                            with col2:
+                                total_taa = pd.to_numeric(final_df['Total (TAA)'], errors='coerce').sum() if 'Total (TAA)' in final_df else 0
+                                st.metric("Total (TAA)", f"{total_taa:,.0f}")
+                            with col3:
+                                media_rapt = pd.to_numeric(final_df['RAPT'], errors='coerce').mean() if 'RAPT' in final_df else 0
+                                st.metric("Média RAPT", f"{media_rapt:.2f}")
+                            with col4:
+                                total_lic = pd.to_numeric(final_df['LIC'], errors='coerce').sum() if 'LIC' in final_df else 0
+                                st.metric("Total Cursos Licenciatura", f"{total_lic:,.0f}")
+
+                        st.markdown("---")
 
                         # Expander para mostrar as tabelas detalhadas de cada aba.
-                        with st.expander("Mostrar tabelas detalhadas"):
+                        with st.expander("Mostrar tabelas detalhadas", expanded=False):
                             for title, df_to_display in detailed_data:
                                 st.subheader(title)
                                 st.dataframe(df_to_display)
@@ -749,25 +876,26 @@ def main():
                         # Itera sobre as colunas do final_df para gerar gráficos de pizza.
                         for col in final_df.columns:
                             if col != 'Unidade Acadêmica' and col != 'Total (TAA)':
-                                st.subheader(f"Distribuição de {col} por Unidade Acadêmica")
-                                try:
-                                    # Certifica-se de que a coluna é numérica e não contém apenas zeros ou NaNs.
-                                    if pd.api.types.is_numeric_dtype(final_df[col]) and final_df[col].sum() > 0:
-                                        chart_data = final_df[['Unidade Acadêmica', col]].dropna()
-                                        if not chart_data.empty:
-                                            fig = px.pie(chart_data, names='Unidade Acadêmica', values=col, title=f"{col} por Unidade Acadêmica")
-                                            st.plotly_chart(fig, use_container_width=True)
+                                with st.container(border=True):
+                                    st.subheader(f"Distribuição de {col} por Unidade Acadêmica")
+                                    try:
+                                        # Certifica-se de que a coluna é numérica e não contém apenas zeros ou NaNs.
+                                        if pd.api.types.is_numeric_dtype(final_df[col]) and final_df[col].sum() > 0:
+                                            chart_data = final_df[['Unidade Acadêmica', col]].dropna()
+                                            if not chart_data.empty:
+                                                fig = px.pie(chart_data, names='Unidade Acadêmica', values=col, title=f"{col} por Unidade Acadêmica")
+                                                st.plotly_chart(fig, use_container_width=True)
+                                            else:
+                                                st.info(f"Dados insuficientes na coluna '{col}' para gerar o gráfico de pizza.")
                                         else:
-                                            st.info(f"Dados insuficientes na coluna '{col}' para gerar o gráfico de pizza.")
-                                    else:
-                                        st.info(f"A coluna '{col}' não é numérica ou não contém dados válidos para gerar um gráfico de pizza.")
-                                except Exception as e:
-                                    st.error(f"Não foi possível gerar o gráfico de pizza para '{col}': {e}")
+                                            st.info(f"A coluna '{col}' não é numérica ou não contém dados válidos para gerar um gráfico de pizza.")
+                                    except Exception as e:
+                                        st.error(f"Não foi possível gerar o gráfico de pizza para '{col}': {e}")
                     else:
                         st.warning("Nenhuma das abas do arquivo pôde ser processada com sucesso. Verifique os erros acima e o formato do arquivo.")
 
             except Exception as e:
-                st.error(f"Não foi possível ler o arquivo '{arquivo_excel.name}'. O arquivo pode estar corrompido ou não é um formato Excel válido. Erro: {e}")
+                st.error(f"Não foi possível ler o arquivo '{nome_arquivo_excel}'. O arquivo pode estar corrompido ou não é um formato Excel válido. Erro: {e}")
         else:
             st.info("Por favor, anexe um arquivo .xlsx para iniciar a análise.")
 
